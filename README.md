@@ -1,18 +1,12 @@
-# Blacksmith: DRE em Sankey no Microsoft Fabric
+# Blacksmith: DRE em Sankey com simulação e write-back no Microsoft Fabric
 
-Projeto de ponta a ponta no **Microsoft Fabric** que mostra, num gráfico de **Sankey**, como a receita de uma empresa se transforma em lucro, ou em prejuízo. O caminho completo:
+**Segunda parte do [fabric-app-dre-sankey](https://github.com/alisonpezzott/fabric-app-dre-sankey).** Na primeira versão, o Fabric App mostra num Sankey como a receita vira lucro, ou prejuízo. Agora o app deixa de ser só leitura e vira uma ferramenta de planejamento: o usuário cria **simulações** de premissas, vê o impacto na hora na DRE e no Sankey e grava tudo no **SQL Database do próprio Fabric App**, sem tocar no modelo semântico.
 
-**CSVs → modelo semântico Import (Power Query + DAX + testes de qualidade) → Fabric App (React + TypeScript)**
+![Modo Simulado com o painel "Simulação" aberto: premissa de −8% em despesas administrativas em 2026 e o impacto ao vivo, com EBITDA +R$ 1,3 mi e lucro líquido +R$ 944 mil.](docs/imagens/app-dre-sankey-write-back.png)
 
-Toda a engenharia fica dentro do modelo: não há lakehouse, notebook nem pipeline. Um report de conferência, sobre o mesmo modelo, mostra os testes e os números de referência.
+*Painel "Simulação" em 2026: −8% em despesas administrativas e o impacto ao vivo, antes de salvar.*
 
-O app segue o **IBM Carbon Design System**, abre no tema escuro e tem tema claro. Clicar num ponto de um gráfico filtra os outros, como no Power BI.
-
-**Esta é a versão com write-back** do [fabric-app-dre-sankey](https://github.com/alisonpezzott/fabric-app-dre-sankey): além de analisar o realizado, o usuário cria **simulações** de premissas (receita, custos e despesas administrativas), vê o impacto na hora na DRE e no Sankey e grava tudo no **SQL Database do próprio Fabric App**, sem tocar no modelo semântico. Veja [Simulação e write-back](#simulação-e-write-back).
-
-![Blacksmith DRE com mar/2025 selecionado: KPIs com o prejuízo de R$ 2,59 mi e, no Sankey, o nó vermelho "Prejuízo Líquido" cobrindo despesas, D&A e resultado financeiro.](docs/imagens/app-dre-sankey_capa.png)
-
-*Mar/2025 selecionado na tendência: o EBITDA fica negativo e o nó **Prejuízo Líquido** passa a financiar despesas, D&A e resultado financeiro.*
+> **Onde está o código:** a simulação está no branch [`feat/simulacao-write-back`](https://github.com/alisonpezzott/fabric-app-dre-sankey-write-back/tree/feat/simulacao-write-back). A `main` é o ponto de partida da demonstração em vídeo, em que a funcionalidade é construída ao vivo a partir do [`prompt_feat_write_back.md`](prompt_feat_write_back.md).
 
 > **Os dados são 100% fictícios.** A Blacksmith é uma empresa inventada, e a base foi gerada com semente fixa (seed 42). Se você adaptar o projeto para dados reais, anonimize-os antes e nunca versione dados de clientes.
 
@@ -20,8 +14,9 @@ O app segue o **IBM Carbon Design System**, abre no tema escuro e tem tema claro
 
 ## Sumário
 
-- [O que tem no projeto](#o-que-tem-no-projeto)
 - [Simulação e write-back](#simulação-e-write-back)
+- [A base: DRE em Sankey](#a-base-dre-em-sankey)
+- [O que tem no projeto](#o-que-tem-no-projeto)
 - [Arquitetura](#arquitetura)
 - [Requisitos](#requisitos)
 - [Instalação passo a passo](#instalação-passo-a-passo)
@@ -29,6 +24,53 @@ O app segue o **IBM Carbon Design System**, abre no tema escuro e tem tema claro
 - [Segurança](#segurança)
 - [Limitações conhecidas](#limitações-conhecidas)
 - [Licença](#licença)
+
+---
+
+## Simulação e write-back
+
+O que o usuário faz:
+
+1. **Criar uma simulação** com nome, descrição e período (ano e intervalo de meses), sempre sobre o **realizado**.
+2. **Ajustar três premissas**, em percentual ou em reais:
+
+   | premissa | contas afetadas |
+   |---|---|
+   | Receita líquida | as 5 receitas e as 2 deduções (mesmo fator: a receita líquida varia exatamente o ajuste) |
+   | Custos (CPV/CSP) | as 4 contas de custo |
+   | Despesas administrativas | pessoal administrativo e despesas gerais e administrativas |
+
+3. **Ver o impacto na hora**, sem salvar: receita, lucro bruto, EBITDA, lucro líquido e margens, realizado × simulado.
+4. **Alternar para o modo Simulado** na barra de filtros:
+   - os KPIs mostram a variação contra o realizado;
+   - a DRE ganha as colunas Realizado, Simulado, Δ e Δ%;
+   - o Sankey é o mesmo gráfico, com os nós alterados tracejados.
+5. **Salvar com justificativa** (obrigatória para premissas diferentes de zero), reabrir, duplicar e arquivar simulações.
+6. **Consultar o histórico**: cada ação gera uma linha de auditoria.
+
+Como os números ficam consistentes:
+
+- O cálculo parte das **contas** devolvidas pelo modelo, nunca dos totais, e refaz a mesma cascata das medidas da DRE.
+- O **IR & CSLL** é recalculado sobre a variação do LAIR, à alíquota efetiva do período.
+- O Sankey simulado usa a mesma lógica de prejuízo da medida `sankey_valor`. Sem premissas, o simulado é idêntico ao realizado, e isso é testado contra o modelo.
+
+O write-back grava em três tabelas do SQL Database do app (`simulacao`, `premissa_simulacao` e `auditoria_simulacao`). Cada usuário só vê e altera as próprias simulações, não há exclusão (só arquivar) e um controle de versão impede que uma aba sobrescreva a outra. Detalhes técnicos, diagramas e limitações em [`docs/simulacao_write_back.md`](docs/simulacao_write_back.md).
+
+---
+
+## A base: DRE em Sankey
+
+Tudo o que a primeira versão já fazia continua aqui. É um projeto de ponta a ponta no **Microsoft Fabric** que mostra, num gráfico de **Sankey**, como a receita de uma empresa se transforma em lucro, ou em prejuízo. O caminho completo:
+
+**CSVs → modelo semântico Import (Power Query + DAX + testes de qualidade) → Fabric App (React + TypeScript)**
+
+Toda a engenharia fica dentro do modelo: não há lakehouse, notebook nem pipeline. Um report de conferência, sobre o mesmo modelo, mostra os testes e os números de referência.
+
+O app segue o **IBM Carbon Design System**, abre no tema escuro e tem tema claro. Clicar num ponto de um gráfico filtra os outros, como no Power BI.
+
+![Blacksmith DRE com mar/2025 selecionado: KPIs com o prejuízo de R$ 2,59 mi e, no Sankey, o nó vermelho "Prejuízo Líquido" cobrindo despesas, D&A e resultado financeiro.](docs/imagens/app-dre-sankey_capa.png)
+
+*Mar/2025 selecionado na tendência: o EBITDA fica negativo e o nó **Prejuízo Líquido** passa a financiar despesas, D&A e resultado financeiro.*
 
 ---
 
@@ -56,6 +98,7 @@ O app segue o **IBM Carbon Design System**, abre no tema escuro e tem tema claro
 |---|---|---|
 | Modelo + report | `fabric-workspace/dre-sankey.pbip` | Modelo **Import**: o Power Query lê os 7 CSVs de `dataset/`, confere cabeçalho e tipos e cria `dim_cenario`. Tem 54 medidas DAX (DRE, margens, comparativos com o ano anterior e com o orçado, indicadores operacionais e o Sankey) e a tabela calculada `_qualidade`, com 50 testes. O report traz páginas de conferência: testes de qualidade, DRE anual, resultado mensal, links do Sankey, regiões e operacional. |
 | App | `app-dre-sankey` | Fabric App com KPIs, Sankey, tendência mensal, regiões, tabela da DRE e painel operacional, além de filtragem cruzada e tema claro/escuro. |
+| Simulação (branch `feat/simulacao-write-back`) | `app-dre-sankey/src/simulacao`, `app-dre-sankey/rayfin/data` | Motor de simulação, painel de premissas, modo Simulado e as três tabelas do write-back no SQL Database do app. |
 
 ### A lógica do prejuízo no Sankey
 
@@ -64,43 +107,6 @@ A medida `sankey_valor` calcula cada link sobre os valores já agregados no filt
 - Quando a receita acaba, a parte não coberta de cada gasto passa a sair do nó **Prejuízo Líquido**.
 - Os subtotais zerados (EBITDA, EBIT…) somem do gráfico.
 - Somar links pré-calculados mês a mês mostraria lucro e prejuízo ao mesmo tempo. Calcular sobre o agregado evita isso.
-
----
-
-## Simulação e write-back
-
-> **Onde está o código:** a simulação está no branch [`feat/simulacao-write-back`](https://github.com/alisonpezzott/fabric-app-dre-sankey-write-back/tree/feat/simulacao-write-back). A `main` é o ponto de partida da demonstração em vídeo, em que a funcionalidade é construída ao vivo a partir do [`prompt_feat_write_back.md`](prompt_feat_write_back.md).
-
-![Modo Simulado com o painel "Simulação" aberto: premissa de −8% em despesas administrativas em 2026 e o impacto ao vivo, com EBITDA +R$ 1,3 mi e lucro líquido +R$ 944 mil.](docs/imagens/app-dre-sankey-write-back.png)
-
-*Painel "Simulação" em 2026: −8% em despesas administrativas e o impacto ao vivo, antes de salvar.*
-
-O app deixa de ser só leitura e vira uma ferramenta de planejamento:
-
-1. **Criar uma simulação** com nome, descrição e período (ano e intervalo de meses), sempre sobre o **realizado**.
-2. **Ajustar três premissas**, em percentual ou em reais:
-
-   | premissa | contas afetadas |
-   |---|---|
-   | Receita líquida | as 5 receitas e as 2 deduções (mesmo fator: a receita líquida varia exatamente o ajuste) |
-   | Custos (CPV/CSP) | as 4 contas de custo |
-   | Despesas administrativas | pessoal administrativo e despesas gerais e administrativas |
-
-3. **Ver o impacto na hora**, sem salvar: receita, lucro bruto, EBITDA, lucro líquido e margens, realizado × simulado.
-4. **Alternar para o modo Simulado** na barra de filtros:
-   - os KPIs mostram a variação contra o realizado;
-   - a DRE ganha as colunas Realizado, Simulado, Δ e Δ%;
-   - o Sankey é o mesmo gráfico, com os nós alterados tracejados.
-5. **Salvar com justificativa** (obrigatória para premissas diferentes de zero), reabrir, duplicar e arquivar simulações.
-6. **Consultar o histórico**: cada ação gera uma linha de auditoria.
-
-Como os números ficam consistentes:
-
-- O cálculo parte das **contas** devolvidas pelo modelo, nunca dos totais, e refaz a mesma cascata das medidas da DRE.
-- O **IR & CSLL** é recalculado sobre a variação do LAIR, à alíquota efetiva do período.
-- O Sankey simulado usa a mesma lógica de prejuízo da medida `sankey_valor`. Sem premissas, o simulado é idêntico ao realizado, e isso é testado contra o modelo.
-
-O write-back grava em três tabelas do SQL Database do app (`simulacao`, `premissa_simulacao` e `auditoria_simulacao`). Cada usuário só vê e altera as próprias simulações, não há exclusão (só arquivar) e um controle de versão impede que uma aba sobrescreva a outra. Detalhes técnicos, diagramas e limitações em [`docs/simulacao_write_back.md`](docs/simulacao_write_back.md).
 
 ---
 
