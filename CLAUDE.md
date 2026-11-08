@@ -474,8 +474,11 @@ src/
     cascata_sankey.ts          # porte da medida sankey_valor (exceção da regra 5)
     visao_simulada.ts          # KPIs, links do Sankey e linhas da DRE no modo simulado
     validacao_premissas.ts     # regras de negócio validadas antes de gravar
+    textos_simulacao.ts        # números digitados em pt-BR, rótulo do período, resumo da auditoria
     repositorio_simulacoes.ts  # write-back: CRUD, versão (concorrência otimista) e auditoria
     cliente_simulacoes.ts      # liga o repositório ao client.data do Rayfin
+    cliente_dados_falso.ts     # só testes: imita o Rayfin 1.36.2 (select, só id nas mutações, policies)
+    fixtures_teste.ts          # só testes: fixtures do modelo convertidas para o motor
   componentes/
     cabecalho_app.tsx
     barra_filtros.tsx
@@ -564,7 +567,7 @@ TREATAS ( { "sul" }, dim_regiao[cod_regiao] )        -- regiões clicadas (subst
 
 Opções do construtor: `sem_mes` (sem intervalo nem seleção de meses: tendência e detalhe do nó), `sem_regiao` (regiões) e `sem_cenario` (DRE, subtotais e operacional).
 
-**Domínio e dimensões** (sem filtros): `q_anos` (`DISTINCT ( dim_calendario[ano] )`), `q_calendario` (`indice_mes`, `ano`, `mes`, `mes_ano`: domínio da seleção por mês e rótulos), `q_meses` (`mes`, `nome_mes`), `q_cenarios` (`dim_cenario`), `q_regioes_lista` (`dim_regiao`), `q_sankey_nos` (`dim_no_sankey ORDER BY coluna_sankey`) e `q_carga` (`ROW ( "data_ultima_carga", [data_ultima_carga] )`).
+**Domínio e dimensões** (sem filtros): `q_anos` (`DISTINCT ( dim_calendario[ano] )`), `q_calendario` (`indice_mes`, `ano`, `mes`, `mes_ano`: domínio da seleção por mês e rótulos), `q_meses` (`mes`, `nome_mes`), `q_cenarios` (`dim_cenario`), `q_regioes_lista` (`dim_regiao`), `q_sankey_nos` (`dim_no_sankey ORDER BY coluna_sankey`) e `q_carga` (`ROW ( "data_ultima_carga", [data_ultima_carga] )`). Só com uma simulação aberta (seção 8.7): `q_contas` (plano de contas de `dim_conta`, valida o mapa de premissas) e `q_links_sankey_lista` (os 33 links de `dim_link_sankey` com `cod_conta`).
 
 **q_kpis**
 ```dax
@@ -627,7 +630,7 @@ ORDER BY [receita_liquida] DESC
 EVALUATE
 ADDCOLUMNS (
     SUMMARIZECOLUMNS (
-        dim_conta[ordem_dre], dim_conta[cod_conta], dim_conta[nome_conta], dim_conta[cod_grupo],
+        dim_conta[ordem_dre], dim_conta[cod_conta], dim_conta[nome_conta], dim_conta[cod_grupo], dim_conta[natureza],
         <filtros_sem_cenario>,
         "realizado", CALCULATE ( [valor_dre], dim_cenario[cod_cenario] = "realizado" ),
         "orcado", CALCULATE ( [valor_dre], dim_cenario[cod_cenario] = "orcado" )
