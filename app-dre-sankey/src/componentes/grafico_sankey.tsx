@@ -1,5 +1,8 @@
 // Sankey da DRE: como a receita vira lucro (ou prejuízo) no recorte filtrado.
 // Os valores dos links vêm prontos da medida sankey_valor; aqui só há layout e desenho.
+// No modo Simulado, o mesmo componente recebe os links da cascata simulada e a
+// comparação com o realizado: nós alterados ganham contorno tracejado e a dica mostra
+// realizado → simulado (Δ, Δ%).
 // Clicar num nó destaca os fluxos dele (os demais esmaecem) e abre a evolução mensal.
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
@@ -34,6 +37,8 @@ interface GraficoSankeyProps {
     ao_selecionar_no: (no: NoLayout) => void;
     /** em tela cheia, ocupa a altura do contêiner pai em vez da altura padrão */
     expandido?: boolean;
+    /** Modo Simulado: valor realizado de cada nó (os links trazem `valor_realizado`). */
+    comparacao?: { nos_realizado: Map<string, number> } | null;
 }
 
 interface Dica {
@@ -75,6 +80,7 @@ export function GraficoSankey({
     no_selecionado,
     ao_selecionar_no,
     expandido = false,
+    comparacao = null,
 }: GraficoSankeyProps) {
     const conteiner = useRef<HTMLDivElement>(null);
     const [tamanho_conteiner, definir_tamanho] = useState({ largura: largura_minima, altura: altura_padrao });
@@ -121,6 +127,22 @@ export function GraficoSankey({
 
     function pct_receita(valor: number): string {
         return receita_liquida ? `${percentual(valor / receita_liquida)} da receita líquida` : "–";
+    }
+
+    /** Dica do modo Simulado: realizado → simulado, Δ e Δ%. */
+    function linhas_simulacao(realizado: number, simulado: number): [string, string][] {
+        const delta = simulado - realizado;
+        return [
+            ["Realizado", formatar(realizado, formatos.moeda)],
+            ["Simulado", formatar(simulado, formatos.moeda)],
+            ["Δ", formatar(delta, formatos.moeda)],
+            ["Δ %", realizado !== 0 ? formatar(delta / Math.abs(realizado), formatos.variacao_pct) : "–"],
+        ];
+    }
+
+    function alterado(no: NoLayout): boolean {
+        if (!comparacao) return false;
+        return Math.abs(no.valor - (comparacao.nos_realizado.get(no.cod_no) ?? 0)) > 0.005;
     }
 
     function linhas_variacao(valor_aa: number | null, var_pct: number | null): [string, string][] {
@@ -197,11 +219,16 @@ export function GraficoSankey({
                                 mostrar_dica(evento, {
                                     titulo,
                                     prejuizo,
-                                    linhas: [
-                                        ["Valor", formatar(link.valor, formatos.moeda)],
-                                        ["Participação", pct_receita(link.valor)],
-                                        ...linhas_variacao(link.valor_aa, link.var_aa_pct),
-                                    ],
+                                    linhas: comparacao
+                                        ? [
+                                            ...linhas_simulacao(link.valor_realizado ?? 0, link.valor),
+                                            ["Participação", pct_receita(link.valor)],
+                                        ]
+                                        : [
+                                            ["Valor", formatar(link.valor, formatos.moeda)],
+                                            ["Participação", pct_receita(link.valor)],
+                                            ...linhas_variacao(link.valor_aa, link.var_aa_pct),
+                                        ],
                                 });
                             };
                             return (
@@ -237,12 +264,18 @@ export function GraficoSankey({
                             mostrar_dica(evento, {
                                 titulo: no.nome_no,
                                 prejuizo,
-                                linhas: [
-                                    ["Valor", formatar(no.valor, formatos.moeda)],
-                                    ["Participação", pct_receita(no.valor)],
-                                    ...linhas_variacao(no.valor_aa, var_pct),
-                                    ["", "clique para ver a evolução mensal"],
-                                ],
+                                linhas: comparacao
+                                    ? [
+                                        ...linhas_simulacao(comparacao.nos_realizado.get(no.cod_no) ?? 0, no.valor),
+                                        ["Participação", pct_receita(no.valor)],
+                                        ["", "clique para ver a evolução mensal (realizado)"],
+                                    ]
+                                    : [
+                                        ["Valor", formatar(no.valor, formatos.moeda)],
+                                        ["Participação", pct_receita(no.valor)],
+                                        ...linhas_variacao(no.valor_aa, var_pct),
+                                        ["", "clique para ver a evolução mensal"],
+                                    ],
                             });
                         };
                         return (
@@ -265,8 +298,9 @@ export function GraficoSankey({
                                     width={no.x1 - no.x0}
                                     height={Math.max(1.5, no.y1 - no.y0)}
                                     fill={cor}
-                                    stroke={selecionado ? paleta.texto : "transparent"}
+                                    stroke={selecionado || alterado(no) ? paleta.texto : "transparent"}
                                     strokeWidth={2}
+                                    strokeDasharray={alterado(no) && !selecionado ? "4 3" : undefined}
                                 />
                                 <text
                                     x={no.x1 + 8}
@@ -293,6 +327,7 @@ export function GraficoSankey({
                                 >
                                     {abreviar_moeda(no.valor)}
                                     {receita_liquida ? ` · ${percentual(no.valor / receita_liquida)}` : ""}
+                                    {alterado(no) ? " · simulado" : ""}
                                 </text>
                             </g>
                         );

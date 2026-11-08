@@ -1,5 +1,6 @@
 // Cartão de KPI: valor, variação contra o ano anterior (▲ verde / ▼ laranja)
-// e sparkline dos últimos 12 meses do recorte.
+// e sparkline dos últimos 12 meses do recorte. No modo Simulado, o valor é o simulado,
+// a variação é contra o realizado e o cartão ganha o selo e o contorno tracejado.
 
 import { area, curveMonotoneX, line } from "d3-shape";
 import { scaleLinear } from "d3-scale";
@@ -20,6 +21,10 @@ export interface CartaoKpiProps {
     cor: string;
     carregando: boolean;
     prejuizo?: boolean;
+    /** Modo Simulado: mostra o selo e contorno tracejado (a diferença não depende só da cor). */
+    simulado?: boolean;
+    /** Linha de apoio abaixo da variação (ex.: "Realizado R$ 1,2 mi"). */
+    detalhe?: string;
 }
 
 function Sparkline({ serie, cor }: { serie: (number | null)[]; cor: string }) {
@@ -69,6 +74,8 @@ export function CartaoKpi({
     cor,
     carregando,
     prejuizo = false,
+    simulado = false,
+    detalhe,
 }: CartaoKpiProps) {
     const alta = variacao !== null && variacao > 0;
     const queda = variacao !== null && variacao < 0;
@@ -77,17 +84,25 @@ export function CartaoKpi({
         <article
             className={cn(
                 "cartao flex min-w-0 flex-col gap-2 p-4",
+                simulado && "border-dashed border-interativo",
                 prejuizo && "border-prejuizo",
             )}
             aria-busy={carregando}
         >
             <header className="flex items-center justify-between gap-2">
                 <h3 className="truncate text-200 text-muted-foreground">{titulo}</h3>
-                {prejuizo && (
-                    <span className="rounded-full bg-prejuizo px-2 py-0.5 text-100 text-texto-inverso">
-                        Prejuízo
-                    </span>
-                )}
+                <span className="flex shrink-0 items-center gap-1">
+                    {simulado && (
+                        <span className="rounded-full border border-dashed border-interativo px-2 py-0.5 text-100 text-interativo">
+                            Simulado
+                        </span>
+                    )}
+                    {prejuizo && (
+                        <span className="rounded-full bg-prejuizo px-2 py-0.5 text-100 text-texto-inverso">
+                            Prejuízo
+                        </span>
+                    )}
+                </span>
             </header>
 
             {carregando ? (
@@ -121,6 +136,7 @@ export function CartaoKpi({
                             </>
                         )}
                     </p>
+                    {detalhe && <p className="numero truncate text-200 text-texto-fraco" title={detalhe}>{detalhe}</p>}
                     <Sparkline serie={serie} cor={cor} />
                 </>
             )}

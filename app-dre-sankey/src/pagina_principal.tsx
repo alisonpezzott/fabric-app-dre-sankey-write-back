@@ -2,12 +2,17 @@
 // paralelo (uma por resultado, sem duplicar), repassando cada resultado ao seu visual.
 // Filtragem cruzada como no Power BI: clicar num mês (tendência, evolução do nó) ou numa
 // região filtra os demais visuais; Ctrl+clique soma pontos; Esc ou o botão da barra limpa.
+// Simulação (seção 8.7 do CLAUDE.md): o painel lateral edita premissas gravadas no SQL do
+// app; no modo Simulado, KPIs, DRE e Sankey mostram o resultado do motor sobre as contas do
+// recorte, com ano, meses e cenário travados no período da simulação (sobre o realizado).
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import type { InteractionEvent } from "@microsoft/fabric-visuals-core";
 
 import { numero, texto, useConsulta, type Linha } from "@/dados/cliente_modelo";
+import { useAuth } from "@/hooks/auth.context";
+import { cn } from "@/lib/utils";
 import {
     cenarios,
     meses_do_intervalo,
@@ -16,16 +21,19 @@ import {
     regioes_selecionadas,
     type Cenario,
     type DominioFiltros,
+    type EstadoFiltros,
 } from "@/dados/construtor_filtros";
 import {
     q_anos,
     q_calendario,
     q_carga,
     q_cenarios,
+    q_contas,
     q_detalhe_no,
     q_dre,
     q_dre_subtotais,
     q_kpis,
+    q_links_sankey_lista,
     q_meses,
     q_operacional,
     q_regioes,
@@ -35,14 +43,23 @@ import {
     q_tendencia,
     type ContextoConsulta,
 } from "@/dados/consultas_dax";
-import { formatos, type Formato } from "@/dados/formatacao";
+import { abreviar_moeda, formatar, formatos, type Formato } from "@/dados/formatacao";
 import { no_so_de_saida, type LinkSankeyEntrada, type NoSankeyEntrada } from "@/dados/layout_sankey";
 import { filtros_padrao, useEstadoFiltros } from "@/estado/estado_filtros";
+import { useEstadoSimulacao, type ModoVisao } from "@/estado/estado_simulacao";
 import { valores_da_interacao } from "@/estado/selecao_cruzada";
+import { definicoes_da_consulta } from "@/simulacao/cascata_sankey";
+import { repositorio_da_sessao } from "@/simulacao/cliente_simulacoes";
+import { periodo_simulacao } from "@/simulacao/textos_simulacao";
+import type { ContaPlano } from "@/simulacao/mapa_premissas";
+import { contas_da_consulta, simular, type ResultadoSimulacao } from "@/simulacao/motor_simulacao";
+import { kpis_simulados, montar_linhas_dre_simulada, sankey_simulado, type CampoKpiSimulado } from "@/simulacao/visao_simulada";
 import { cor_por_tipo_no, usePaletaGraficos, type PaletaGraficos } from "@/tema/tema_graficos";
 import { BarraFiltros, type OpcoesBarraFiltros } from "./componentes/barra_filtros";
 import { CabecalhoApp } from "./componentes/cabecalho_app";
 import { CartaoKpi } from "./componentes/cartao_kpi";
+import { SeloSimulado } from "./componentes/controles_simulacao";
+import { PainelSimulacao } from "./componentes/painel_simulacao";
 import { Cartao, EstadoErro, EstadoCarregando } from "./componentes/estados_carregamento";
 import { GraficoRegioes } from "./componentes/grafico_regioes";
 import { GraficoSankey } from "./componentes/grafico_sankey";
@@ -130,6 +147,38 @@ const kpis: DefinicaoKpi[] = [
     },
 ];
 
+/**
+ * Filtros efetivos do modo Simulado: ano, meses e cenário presos ao período da simulação
+ * (sobre o realizado); regiões continuam. Uma seleção de meses fora do período é descartada.
+ */
+function filtros_simulados(
+    filtros: EstadoFiltros,
+    periodo: { ano: number; mes_inicio: number; mes_fim: number },
+    mes_por_indice: Map<number, { ano: number; mes: number }>,
+): EstadoFiltros {
+    const selecao = filtros.selecao;
+    const fora = selecao?.campo === "indice_mes" && selecao.valores.some((i) => {
+        const m = mes_por_indice.get(i);
+        return !m || m.ano !== periodo.ano || m.mes < periodo.mes_inicio || m.mes > periodo.mes_fim;
+    });
+    return {
+        ...filtros,
+        ano: periodo.ano,
+        mes_inicio: periodo.mes_inicio,
+        mes_fim: periodo.mes_fim,
+        cenario: "realizado",
+        selecao: fora ? null : selecao,
+    };
+}
+
+interface CalculoSimulacao {
+    /** Período inteiro, todas as regiões: o impacto ao vivo do painel. */
+    periodo: ResultadoSimulacao | null;
+    /** Recorte atual da tela (modo Simulado). */
+    tela: ResultadoSimulacao | null;
+    erro: Error | undefined;
+}
+
 export function PaginaPrincipal() {
     const paleta = usePaletaGraficos();
 
@@ -173,7 +222,35 @@ export function PaginaPrincipal() {
         };
     }, [dominio, meses.linhas, regioes_lista.linhas, cenarios_lista.linhas]);
 
-    const [filtros, acoes, versoes] = useEstadoFiltros(dominio);
+    // simulação: sessão do Fabric → repositório (SQL do app) → estado do painel
+    const { session } = useAuth();
+    const repositorio = useMemo(() => repositorio_da_sessao(session), [session]);
+    const [sim, acoes_sim] = useEstadoSimulacao(repositorio);
+    const [painel_aberto, definir_painel_aberto] = useState(false);
+    const edicao = sim.edicao;
+    const modo_simulado = sim.modo === "simulado" && edicao !== null;
+
+    const mes_por_indice = useMemo(
+        () =>
+            new Map(
+                (calendario.linhas ?? []).map((l) => [
+                    numero(l, "indice_mes") ?? 0,
+                    { ano: numero(l, "ano") ?? 0, mes: numero(l, "mes") ?? 0 },
+                ]),
+            ),
+        [calendario.linhas],
+    );
+
+    const [filtros_barra, acoes, versoes] = useEstadoFiltros(dominio);
+    const periodo_sim = edicao && dominio?.anos.includes(edicao.ano)
+        ? { ano: edicao.ano, mes_inicio: edicao.mes_inicio, mes_fim: edicao.mes_fim }
+        : null;
+    const chave_periodo = periodo_sim ? `${periodo_sim.ano}:${periodo_sim.mes_inicio}:${periodo_sim.mes_fim}` : null;
+    const filtros = useMemo<EstadoFiltros | undefined>(() => {
+        if (!filtros_barra || !modo_simulado || !chave_periodo) return filtros_barra;
+        const [ano, mes_inicio, mes_fim] = chave_periodo.split(":").map(Number);
+        return filtros_simulados(filtros_barra, { ano, mes_inicio, mes_fim }, mes_por_indice);
+    }, [filtros_barra, modo_simulado, chave_periodo, mes_por_indice]);
     const ctx = useMemo<ContextoConsulta | undefined>(
         () => (filtros && dominio ? { filtros, dominio } : undefined),
         [filtros, dominio],
@@ -255,6 +332,53 @@ export function PaginaPrincipal() {
     const dre = useConsulta(ctx ? q_dre(ctx) : null);
     const dre_subtotais = useConsulta(ctx ? q_dre_subtotais(ctx) : null);
     const operacional = useConsulta(ctx ? q_operacional(ctx) : null);
+
+    // simulação: plano de contas, links possíveis e o realizado do período (base do motor);
+    // a base reaproveita a q_dre da tela quando o recorte é o próprio período
+    const plano_contas = useConsulta(edicao ? q_contas : null);
+    const lista_links = useConsulta(edicao ? q_links_sankey_lista : null);
+    const ctx_base = useMemo<ContextoConsulta | undefined>(() => {
+        if (!dominio || !chave_periodo) return undefined;
+        const [ano, mes_inicio, mes_fim] = chave_periodo.split(":").map(Number);
+        return { dominio, filtros: { ano, mes_inicio, mes_fim, regioes: [], cenario: "realizado", selecao: null } };
+    }, [dominio, chave_periodo]);
+    const query_base = ctx_base ? q_dre(ctx_base) : null;
+    const query_recorte = ctx ? q_dre(ctx) : null;
+    const base_propria = useConsulta(query_base !== query_recorte ? query_base : null);
+    const base = query_base !== null && query_base === query_recorte ? dre : base_propria;
+
+    const calculo = useMemo<CalculoSimulacao>(() => {
+        const vazio: CalculoSimulacao = { periodo: null, tela: null, erro: undefined };
+        if (!edicao || !plano_contas.linhas || !base.linhas || base.carregando) return vazio;
+        try {
+            const plano: ContaPlano[] = plano_contas.linhas
+                .map((l) => ({ cod_conta: texto(l, "cod_conta"), natureza: texto(l, "natureza") }))
+                .filter((c) => c.cod_conta !== "");
+            const contas_base = contas_da_consulta(base.linhas);
+            return {
+                periodo: simular(plano, contas_base, contas_base, edicao.premissas),
+                tela: modo_simulado && dre.linhas
+                    ? simular(plano, contas_base, contas_da_consulta(dre.linhas), edicao.premissas)
+                    : null,
+                erro: undefined,
+            };
+        } catch (erro) {
+            return { ...vazio, erro: erro instanceof Error ? erro : new Error(String(erro)) };
+        }
+    }, [edicao, plano_contas.linhas, base.linhas, base.carregando, modo_simulado, dre.linhas]);
+
+    const visao_sim = useMemo(() => {
+        if (!calculo.tela) return null;
+        const definicoes = lista_links.linhas ? definicoes_da_consulta(lista_links.linhas) : null;
+        return {
+            kpis: kpis_simulados(calculo.tela),
+            dre: dre.linhas && dre_subtotais.linhas
+                ? montar_linhas_dre_simulada(dre.linhas, dre_subtotais.linhas, calculo.tela)
+                : null,
+            sankey: definicoes ? sankey_simulado(definicoes, calculo.tela) : null,
+        };
+    }, [calculo.tela, lista_links.linhas, dre.linhas, dre_subtotais.linhas]);
+    const erro_simulacao = calculo.erro ?? plano_contas.erro ?? lista_links.erro ?? base.erro;
     const detalhe = useConsulta(
         ctx && no_selecionado && nos_sankey
             ? q_detalhe_no(
@@ -335,9 +459,21 @@ export function PaginaPrincipal() {
             ? recortes.regioes_sel.map((cod) => opcoes.regioes.find((r) => r.cod_regiao === cod)?.nome_regiao ?? cod).join(", ")
             : null;
 
+    const definir_modo = (modo: ModoVisao) => {
+        if (modo === sim.modo) return;
+        // a seleção cruzada pertence ao recorte anterior (outro ano ou período)
+        if (filtros.selecao) acoes.limpar_selecao();
+        acoes_sim.definir_modo(modo);
+    };
+    const nome_mes = (mes: number) => opcoes.meses.find((m) => m.mes === mes)?.nome_mes ?? String(mes);
+    const rotulo_periodo_sim = edicao ? periodo_simulacao(edicao, nome_mes) : null;
+    const sufixo_sim = modo_simulado && edicao ? ` · simulação “${edicao.nome}”` : "";
+
     const linha_kpi = kpi.linhas?.[0];
     const serie_12 = (tendencia.linhas ?? []).slice(-12);
-    const prejuizo = (numero(linha_kpi, "prejuizo_liquido") ?? 0) > 0;
+    const prejuizo = modo_simulado
+        ? (visao_sim?.kpis.lucro_liquido.simulado ?? 0) < 0
+        : (numero(linha_kpi, "prejuizo_liquido") ?? 0) > 0;
     const descrever = (omitir?: OmitirRecorte) => descrever_recorte(ctx, opcoes, rotulos_mes, omitir);
     const recorte = descrever();
     const recorte_sem_mes = descrever({ sem_mes: true });
@@ -352,10 +488,28 @@ export function PaginaPrincipal() {
                 opcoes={opcoes}
                 padrao={filtros_padrao(dominio)}
                 rotulo_selecao={rotulo_selecao}
+                visao={{
+                    modo: modo_simulado ? "simulado" : "realizado",
+                    simulacao: edicao ? edicao.nome || "Simulação sem nome" : null,
+                    periodo: rotulo_periodo_sim,
+                    ao_mudar: definir_modo,
+                    ao_abrir_painel: () => definir_painel_aberto(true),
+                }}
             />
 
+            {modo_simulado && erro_simulacao && (
+                <EstadoErro erro={erro_simulacao} titulo="Não foi possível calcular a simulação" />
+            )}
+
             <section aria-label="Indicadores principais" className="grid grid-cols-2 gap-grid md:grid-cols-3 xl:grid-cols-6">
-                {kpis.map((definicao) => (
+                {modo_simulado ? (
+                    <KpisSimulados
+                        comparacoes={visao_sim?.kpis ?? null}
+                        carregando={!visao_sim && !erro_simulacao}
+                        serie={serie_12}
+                        paleta={paleta}
+                    />
+                ) : kpis.map((definicao) => (
                     <CartaoKpi
                         key={definicao.campo}
                         titulo={definicao.titulo}
@@ -371,14 +525,21 @@ export function PaginaPrincipal() {
                     />
                 ))}
             </section>
-            {kpi.erro && <EstadoErro erro={kpi.erro} titulo="Não foi possível calcular os indicadores" />}
+            {kpi.erro && !modo_simulado && <EstadoErro erro={kpi.erro} titulo="Não foi possível calcular os indicadores" />}
 
             <Cartao
-                titulo="Do faturamento ao lucro"
-                subtitulo={`${recorte} · clique num nó para destacar os fluxos e ver a evolução mensal`}
-                className={sankey_expandido ? "fixed inset-0 z-50 overflow-hidden" : undefined}
+                titulo={modo_simulado ? "Do faturamento ao lucro · simulado" : "Do faturamento ao lucro"}
+                subtitulo={`${recorte}${sufixo_sim} · clique num nó para destacar os fluxos e ver a evolução mensal`}
+                className={cn(
+                    sankey_expandido && "fixed inset-0 z-50 overflow-hidden",
+                    modo_simulado && "border-dashed border-interativo",
+                )}
                 acoes={
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center justify-end gap-4">
+                        {edicao && (
+                            <AlternadorVisao modo={modo_simulado ? "simulado" : "realizado"} ao_mudar={definir_modo} />
+                        )}
+                        {modo_simulado && <SeloSimulado />}
                         <Legenda
                             itens={[
                                 { rotulo: "Receitas", cor: paleta.receita },
@@ -407,10 +568,15 @@ export function PaginaPrincipal() {
             >
                 <GraficoSankey
                     nos={nos_sankey}
-                    links={links_sankey}
-                    carregando={links.carregando || nos.carregando}
-                    erro={links.erro}
-                    chave_recorte={JSON.stringify(filtros)}
+                    links={modo_simulado ? visao_sim?.sankey?.links : links_sankey}
+                    carregando={
+                        modo_simulado
+                            ? !visao_sim?.sankey || dre.carregando || lista_links.carregando
+                            : links.carregando || nos.carregando
+                    }
+                    erro={modo_simulado ? erro_simulacao ?? dre.erro : links.erro}
+                    comparacao={modo_simulado && visao_sim?.sankey ? { nos_realizado: visao_sim.sankey.nos_realizado } : null}
+                    chave_recorte={`${JSON.stringify(filtros)}:${modo_simulado ? "simulado" : "realizado"}`}
                     no_selecionado={cod_no_selecionado}
                     ao_selecionar_no={(no) => selecionar_no((atual) => (atual === no.cod_no ? null : no.cod_no))}
                     expandido={sankey_expandido}
@@ -438,7 +604,7 @@ export function PaginaPrincipal() {
                     tabela={tendencia.tabela}
                     carregando={tendencia.carregando}
                     erro={tendencia.erro}
-                    subtitulo={recorte_sem_mes}
+                    subtitulo={modo_simulado ? `${recorte_sem_mes} · realizado` : recorte_sem_mes}
                     intervalo={recortes.intervalo}
                     selecionados={recortes.meses_sel}
                     ao_interagir={interagir_meses("tendencia")}
@@ -458,9 +624,10 @@ export function PaginaPrincipal() {
                 <TabelaDre
                     contas={dre.linhas}
                     subtotais={dre_subtotais.linhas}
-                    carregando={dre.carregando || dre_subtotais.carregando}
-                    erro={dre.erro ?? dre_subtotais.erro}
-                    subtitulo={recorte_sem_cenario}
+                    carregando={dre.carregando || dre_subtotais.carregando || (modo_simulado && !visao_sim?.dre)}
+                    erro={dre.erro ?? dre_subtotais.erro ?? (modo_simulado ? erro_simulacao : undefined)}
+                    subtitulo={`${recorte_sem_cenario}${sufixo_sim}`}
+                    simulada={modo_simulado ? visao_sim?.dre ?? null : undefined}
                     className="lg:col-span-8"
                 />
                 <PainelOperacional
@@ -475,7 +642,25 @@ export function PaginaPrincipal() {
 
             <footer className="pb-8 pt-2 text-center text-200 text-texto-fraco">
                 Blacksmith é uma empresa fictícia: dados 100% sintéticos (seed 42).
+                {edicao && " Simulações são gravadas só no banco do app: o modelo semântico e o realizado não mudam."}
             </footer>
+
+            {painel_aberto && (
+                <PainelSimulacao
+                    estado={{ ...sim, modo: modo_simulado ? "simulado" : "realizado" }}
+                    acoes={{ ...acoes_sim, definir_modo }}
+                    opcoes={{ anos: opcoes.anos, meses: opcoes.meses }}
+                    periodo_sugerido={{
+                        ano: filtros_barra?.ano ?? Math.max(...opcoes.anos),
+                        mes_inicio: filtros_barra?.mes_inicio ?? 1,
+                        mes_fim: filtros_barra?.mes_fim ?? 12,
+                    }}
+                    resultado_periodo={calculo.periodo}
+                    carregando_base={Boolean(edicao) && (base.carregando || plano_contas.carregando)}
+                    erro_base={erro_simulacao}
+                    ao_fechar={() => definir_painel_aberto(false)}
+                />
+            )}
         </Moldura>
     );
 }
@@ -537,4 +722,91 @@ function descrever_recorte(
         partes.push(opcoes.cenarios.find((c) => c.cod_cenario === filtros.cenario)?.nome_cenario ?? filtros.cenario);
     }
     return partes.join(" · ");
+}
+
+/** Alternador Realizado | Simulado do cartão do Sankey (o mesmo estado da barra). */
+function AlternadorVisao({ modo, ao_mudar }: { modo: ModoVisao; ao_mudar: (modo: ModoVisao) => void }) {
+    return (
+        <div role="group" aria-label="Visão do Sankey" className="flex">
+            {(["realizado", "simulado"] as const).map((valor) => (
+                <button
+                    key={valor}
+                    type="button"
+                    aria-pressed={modo === valor}
+                    onClick={() => ao_mudar(valor)}
+                    className={cn(
+                        "border px-3 py-1 text-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                        modo === valor
+                            ? "border-transparent bg-foreground text-background"
+                            : "border-border text-muted-foreground hover:bg-accent",
+                    )}
+                >
+                    {valor === "realizado" ? "Realizado" : "Simulado"}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+const kpis_modo_simulado: { titulo: string; campo: CampoKpiSimulado; formato: Formato; cor: keyof PaletaGraficos }[] = [
+    { titulo: "Receita líquida", campo: "receita_liquida", formato: formatos.moeda, cor: "receita" },
+    { titulo: "Lucro bruto", campo: "lucro_bruto", formato: formatos.moeda, cor: "lucro" },
+    { titulo: "EBITDA", campo: "ebitda", formato: formatos.moeda, cor: "lucro" },
+    { titulo: "Lucro líquido", campo: "lucro_liquido", formato: formatos.moeda, cor: "lucro" },
+    { titulo: "Margem líquida", campo: "margem_liquida", formato: formatos.percentual, cor: "total" },
+];
+
+/** KPIs do modo Simulado: valor simulado, variação contra o realizado e o impacto no lucro. */
+function KpisSimulados({
+    comparacoes,
+    carregando,
+    serie,
+    paleta,
+}: {
+    comparacoes: ReturnType<typeof kpis_simulados> | null;
+    carregando: boolean;
+    serie: Linha[];
+    paleta: PaletaGraficos;
+}) {
+    const lucro = comparacoes?.lucro_liquido;
+    const prejuizo = (lucro?.simulado ?? 0) < 0;
+    const impacto = lucro?.delta ?? null;
+    return (
+        <>
+            {kpis_modo_simulado.map((definicao) => {
+                const c = comparacoes?.[definicao.campo];
+                const margem = definicao.campo === "margem_liquida";
+                return (
+                    <CartaoKpi
+                        key={definicao.campo}
+                        titulo={definicao.titulo}
+                        valor={c?.simulado ?? null}
+                        formato={definicao.formato}
+                        variacao={c?.delta_pct === null || c?.delta_pct === undefined ? null : margem ? c.delta_pct * 100 : c.delta_pct}
+                        formato_variacao={margem ? formatos.variacao_pp : formatos.variacao_pct}
+                        rotulo_variacao="vs realizado"
+                        detalhe={`Realizado ${margem ? formatar(c?.realizado ?? null, formatos.percentual) : abreviar_moeda(c?.realizado ?? null)}`}
+                        serie={serie.map((l) => numero(l, definicao.campo))}
+                        cor={definicao.campo === "lucro_liquido" && prejuizo ? paleta.prejuizo : paleta[definicao.cor]}
+                        carregando={carregando || !c}
+                        prejuizo={definicao.campo === "lucro_liquido" && prejuizo}
+                        simulado
+                    />
+                );
+            })}
+            <CartaoKpi
+                titulo="Impacto no lucro líquido"
+                valor={impacto}
+                formato={formatos.moeda}
+                variacao={lucro?.delta_pct ?? null}
+                formato_variacao={formatos.variacao_pct}
+                rotulo_variacao="vs realizado"
+                detalhe="Simulado − realizado no recorte"
+                serie={[]}
+                cor={(impacto ?? 0) < 0 ? paleta.custo : paleta.lucro}
+                carregando={carregando || !lucro}
+                simulado
+            />
+        </>
+    );
 }
