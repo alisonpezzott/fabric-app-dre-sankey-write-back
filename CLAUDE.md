@@ -52,8 +52,8 @@ Esses valores são testes da tabela `_qualidade` (seção 6). Diferença tolerad
 2. **Nomenclatura:** `snake_case` em todos os identificadores: tabelas, colunas, medidas, pastas de exibição, arquivos, variáveis, componentes e funções do app. Rótulos de exibição para o usuário final ficam nas colunas `nome_*` (com acentos).
 3. **Nomes:** `dim_` dimensões e `fato_` fatos. Repositório e itens do Fabric em kebab-case: repositório e workspace `fabric-app-dre-sankey-write-back` (nova versão do `fabric-app-dre-sankey`, que continua no workspace original), app `app-dre-sankey`, modelo semântico e report `dre-sankey` (mesmo nome; o tipo do item os distingue).
 4. **Segurança de dados:** nunca colar, versionar ou enviar dados reais de clientes em prompts, commits ou logs. Este projeto usa apenas dados fictícios. Se for adaptado para um cliente real, mascarar/anonimizar antes e seguir a política da Power Tuning.
-5. **Sankey dinâmico:** o valor de cada link é sempre calculado pela medida `sankey_valor` sobre os valores já agregados do filtro. Nunca somar links pré‑calculados por mês ou região, porque um mês com prejuízo somado a meses com lucro (ou uma região negativa somada a regiões positivas) mostraria lucro e prejuízo ao mesmo tempo.
-6. **Sem mock no app:** o app consome somente o modelo semântico. Se uma query falhar, mostrar estado de erro, nunca dados fictícios embutidos.
+5. **Sankey dinâmico:** o valor de cada link é sempre calculado pela medida `sankey_valor` sobre os valores já agregados do filtro. Nunca somar links pré‑calculados por mês ou região, porque um mês com prejuízo somado a meses com lucro (ou uma região negativa somada a regiões positivas) mostraria lucro e prejuízo ao mesmo tempo. **Exceção única:** o Sankey simulado (seção 8.7) usa `simulacao/cascata_sankey.ts`, um porte da mesma cascata que roda sobre os valores por conta já agregados do recorte, e é testado contra as fixtures de `sankey_valor` (sem premissas, os links são idênticos).
+6. **Sem mock no app:** o app consome somente o modelo semântico para os números da DRE. Se uma query falhar, mostrar estado de erro, nunca dados fictícios embutidos. O write-back das simulações (seção 8.7) grava só no SQL Database do próprio app, nunca no modelo.
 7. **Sem credenciais no código:** usar apenas a autenticação nativa do Fabric Apps (Rayfin).
 8. **Validar antes de avançar:** cada fase tem um checklist de pronto. Não pule.
 9. **Visual IBM Carbon:** cores, tipografia e superfícies seguem o Carbon Design System (seção 9): paletas de visualização da Carbon, IBM Plex, cantos retos, sem brilho, vidro, gradiente ou neon. O tema **escuro (g100) é o padrão** e o **claro (g10)** fica disponível no cabeçalho; nenhuma cor de dado pode ser fixada para um tema só.
@@ -75,6 +75,9 @@ dataset/*.csv (GitHub)
                  │  Execute DAX Queries API (fabric-app-data)
                  ▼
             app-dre-sankey (Fabric App, template dataapp, TypeScript)
+                 │  GraphQL do Rayfin (client.data.*, Fabric SSO)
+                 ▼
+            SQL Database do app (simulações, premissas e auditoria: write-back, seção 8.7)
 ```
 
 | item | nome |
@@ -437,7 +440,7 @@ npm run bind -- "<URL do dre-sankey>"
 npm run build
 ```
 
-Template `dataapp` com Rayfin CLI 1.36.2. A conexão usa o `@microsoft/fabric-app-data` (alias `modelo_dre` no `fabric.yaml`), não o `rayfin connector add`; no `rayfin/rayfin.yml` só `auth` (Fabric SSO) e `staticHosting` ficam ligados (`data`, `storage` e `functions` desligados). Reaproveitado do template, sem alteração de fluxo: autenticação Fabric (`AuthGate`, `use-auth`), `getFabricClient()`, `VegaVisual`, `DataGrid`, `useCssTheme()`, `toDataTable` e o validador headless `validate:visual`. **Não** criar outro fluxo de login.
+Template `dataapp` com Rayfin CLI 1.36.2. A conexão usa o `@microsoft/fabric-app-data` (alias `modelo_dre` no `fabric.yaml`), não o `rayfin connector add`; no `rayfin/rayfin.yml` ficam ligados `auth` (Fabric SSO), `staticHosting` e `data` (`dialect: mssql`, para o write-back da seção 8.7); `storage` e `functions` desligados. Reaproveitado do template, sem alteração de fluxo: autenticação Fabric (`AuthGate`, `use-auth`), `getFabricClient()`, `VegaVisual`, `DataGrid`, `useCssTheme()`, `toDataTable` e o validador headless `validate:visual`. **Não** criar outro fluxo de login.
 
 ### 8.2 Bibliotecas extras
 - `d3-sankey`: só o `sankeyLinkHorizontal` (desenho dos links). O layout é próprio (`dados/layout_sankey.ts`): colunas fixas por `coluna_sankey` e posição do nó de prejuízo (seção 8.4).
@@ -464,6 +467,15 @@ src/
     estado_filtros.ts          # ano, intervalo de meses, regiões, cenário e seleção cruzada
     estado_tema.ts             # tema escuro (padrão) / claro, guardado no navegador
     selecao_cruzada.ts         # traduz onInteraction dos visuais em valores de seleção
+    estado_simulacao.ts        # simulação aberta, edição não salva, modo realizado/simulado, avisos
+  simulacao/                   # seção 8.7
+    mapa_premissas.ts          # premissa → contas de dim_conta (único lugar do mapa)
+    motor_simulacao.ts         # fatores por conta, subtotais da DRE, IR incremental
+    cascata_sankey.ts          # porte da medida sankey_valor (exceção da regra 5)
+    visao_simulada.ts          # KPIs, links do Sankey e linhas da DRE no modo simulado
+    validacao_premissas.ts     # regras de negócio validadas antes de gravar
+    repositorio_simulacoes.ts  # write-back: CRUD, versão (concorrência otimista) e auditoria
+    cliente_simulacoes.ts      # liga o repositório ao client.data do Rayfin
   componentes/
     cabecalho_app.tsx
     barra_filtros.tsx
@@ -475,6 +487,8 @@ src/
     painel_operacional.tsx
     painel_detalhe_no.tsx      # drill ao clicar num nó do sankey
     estados_carregamento.tsx   # loading, vazio, erro
+    painel_simulacao.tsx       # gaveta: premissas e impacto ao vivo, salvas, histórico
+    lista_simulacoes.tsx, historico_simulacao.tsx, controles_simulacao.tsx
   tema/
     tokens_tema.css
     tema_graficos.ts
@@ -482,6 +496,7 @@ src/
   pagina_principal.tsx         # consultas em paralelo, estado e grade
   main.tsx, App.tsx, hooks/, lib/, services/, components/   # do template
   *.spec.ts                    # testes vitest ao lado de cada módulo
+rayfin/data/                   # entidades do SQL Database do app (seção 8.7) e schema.ts
 scripts/
   bind_semantic_model.mjs      # npm run bind: grava o fabric.yaml a partir da URL do modelo
   capturar_fixtures.mjs        # grava as fixtures dos testes
@@ -672,6 +687,25 @@ Regras: verificar o `status` de cada resposta antes de passar colunas e linhas a
 - [x] Contraste AA nos dois temas (texto ≥ 4,5:1; marcas de gráfico ≥ 3:1).
 - [x] Filtragem cruzada: em 2025, clicar em mar/2025 na tendência mostra o prejuízo de R$ 2,59 mi nos KPIs e o nó de prejuízo no Sankey; Ctrl+clique em abr/2025 soma os dois meses; clicar no Sudeste com abr/2025 selecionado na barra mostra prejuízo; Esc limpa.
 - [x] O visual de origem não se filtra (só esmaece) e a seleção some ao mudar um filtro da barra ou ao selecionar em outro visual.
+
+### 8.7 Simulação e write-back
+
+Detalhes, diagramas e limitações em `docs/simulacao_write_back.md`; roteiro da demo em `prompt_feat_write_back.md`. "Simulação", e não "cenário", porque `dim_cenario` já existe.
+
+- **Premissas:** `receita_liquida` (5 `rec_*` + 2 `ded_*`, mesmo fator), `custos` (4 `cst_*`) e `despesas_administrativas` (`opx_pessoal_administrativo`, `opx_gerais_administrativas`), em `percentual` ou `absoluto` (R$ no período da simulação, convertido no percentual equivalente sobre a base). Mapa só em `simulacao/mapa_premissas.ts`.
+- **Motor:** base = `q_dre` no período da simulação (todas as regiões, realizado); o fator multiplica as contas do recorte da tela; subtotais pela cascata da pasta `01_dre`; IR & CSLL incremental pela alíquota efetiva da base (fixo se LAIR da base ≤ 0). Sem premissas, simulado = realizado = modelo (teste).
+- **Modo Simulado** (barra de filtros): KPIs (variação vs realizado, card "Impacto no lucro líquido"), DRE (Realizado | Simulado | Δ | Δ%) e Sankey (mesmo componente, nós alterados tracejados, tooltip realizado → simulado). Ano, meses e cenário ficam presos ao período da simulação; regiões e filtragem cruzada continuam. Tendência e detalhe do nó ficam no realizado.
+- **Write-back:** entidades `simulacao`, `premissa_simulacao`, `auditoria_simulacao` em `rayfin/data/`, policy `claims.sub = usuario_id`, sem delete (arquivar), auditoria só create/read, `versao` para concorrência otimista, `chave_premissa` única.
+- **Deploy:** o `rayfin up` provisiona o SQL Database e aplica o esquema. As entidades são compiladas por `rayfin/tsconfig.json` (copiado do template `data-app` da CLI; o `dataapp` não traz esse arquivo e, sem ele, o deploy falha com "No rayfin/.temp/compiled/data/*.js files found").
+- **Provisionado em 08/11/2026:** `data: enabled`, SQL Database alcançável (`rayfin up status`).
+
+### Pronto quando
+- [x] Motor, cascata, validação, repositório (cliente falso) e painel com testes; invariante contra `q_dre_subtotais` e `q_sankey_links` (mar/2025, abr/2025, abr/2025 Sudeste e 2025).
+- [x] Exemplo ilustrativo: 1 mi − 600 mil − 250 mil = 150 mil → −8% adm. = 170 mil.
+- [x] `rayfin up` autorizado: SQL Database provisionado e esquema aplicado (08/11/2026).
+- [x] No portal: criar e salvar com justificativa (08/11/2026); `session.user.id` bate com o `claims.sub` das policies.
+- [ ] No portal: conflito de versão em duas abas; histórico; linhas no SQL Database.
+- [ ] Outro usuário não lê nem altera a simulação de um dono (exige uma segunda conta).
 
 ---
 

@@ -90,13 +90,15 @@ O período fica só na simulação, e as premissas herdam esse período.
 
 Um módulo TypeScript puro, determinístico e testável, que recalcula a DRE a partir das contas, nunca a partir dos totais:
 
-1. **Base:** valor por conta no período da simulação, consolidado (todas as regiões), cenário realizado. É uma consulta nova composta só pelas medidas existentes (`[valor_dre]` e `SUM ( fato_lancamentos[valor] )`).
+1. **Base:** valor por conta no período da simulação, consolidado (todas as regiões), cenário realizado. Reaproveite a consulta `q_dre` (coluna `realizado`) com os filtros do período, acrescentando `dim_conta[natureza]` ao agrupamento (mesmo grão), para converter `valor` ↔ `valor_dre` sem adivinhar o sinal.
 2. **Fator por conta:** percentual → `p / 100`; absoluto → `valor / total da categoria na base` (na receita, sobre a receita líquida base). Total zero com ajuste absoluto é premissa inválida (mensagem na UI), nunca divisão por zero.
 3. **Aplicação no recorte:** o fator multiplica cada conta afetada no recorte atual da tela (reaproveita a consulta `q_dre`). Como o fator é uniforme, a soma dos recortes é o total, e o filtro de regiões e a filtragem cruzada continuam válidos.
 4. **Subtotais:** mesma cascata das medidas da pasta `01_dre` (receita líquida → lucro bruto → EBITDA → EBIT → LAIR → lucro líquido). Margens com divisão segura (`null` quando o denominador é zero).
 5. **IR & CSLL incremental:** `ir_simulado = max ( 0, ir_realizado + alíquota × ( lair_simulado − lair_realizado ) )`, com `alíquota = ir / lair` da base. Se o LAIR da base for ≤ 0 ou a alíquota sair de [0, 1], a alíquota vale 0 (IR fixo) e a UI avisa.
 6. **Inalterados:** depreciação e amortização, resultado financeiro e indicadores operacionais. Medidas não aditivas (clientes ativos, headcount) e as `_aa` não são simuladas.
-7. **Sankey simulado:** porte em TypeScript da cascata da medida `sankey_valor` (saldos s0…s5, links de `prejuizo_liquido`, limiar 0,005), aplicado sobre os valores **já agregados** do recorte, com a lista de links de `dim_link_sankey`. É a mesma regra 5 do `CLAUDE.md` (nunca somar links pré-calculados).
+7. **Sankey simulado:** porte em TypeScript da cascata da medida `sankey_valor` (saldos s0…s5, links de `prejuizo_liquido`, limiar 0,005), aplicado sobre os valores **já agregados** do recorte, com a lista de links de `dim_link_sankey` (consulta nova com `cod_conta`). É a mesma regra 5 do `CLAUDE.md` (nunca somar links pré-calculados).
+
+Capture fixtures novas do modelo com `scripts/capturar_fixtures.mjs` (só leitura; exige `az login`): `q_dre` e `q_dre_subtotais` de mar/2025, abr/2025, abr/2025 só Sudeste e 2025, os links do Sankey desses recortes e a lista de `dim_link_sankey`.
 
 **Invariante:** sem premissas, o simulado é idêntico ao realizado em qualquer recorte (DRE, KPIs e cada link do Sankey). Isso vira teste.
 
@@ -105,6 +107,12 @@ Os resultados atualizam a cada alteração de premissa, sem precisar salvar. Tra
 ### 2.5. Persistência (write-back)
 
 Use o **SQL Database gerenciado pelo Fabric App**: `services.data.enabled: true` com `dialect: mssql` no `rayfin/rayfin.yml`, entidades com decoradores em `app-dre-sankey/rayfin/data/` registradas em `schema.ts` e acesso pelo cliente tipado `getRayfinClient().data.<entidade>` (GraphQL gerado pelo Rayfin). Nada de `fetch` manual nem infraestrutura extra.
+
+Três armadilhas já conhecidas neste projeto:
+
+- **`rayfin/tsconfig.json`:** o template `dataapp` não traz esse arquivo, e sem ele o deploy falha com "No rayfin/.temp/compiled/data/*.js files found". Copie o do template `data-app` da CLI (`node_modules/@microsoft/rayfin-cli/templates/data-app/rayfin/tsconfig.json`).
+- **Leituras devolvem só o `id`:** no Rayfin 1.36.2, uma consulta sem `.select([...])` e o `findById` trazem apenas a chave. Toda leitura usa `select([...todos os campos]).where(...).execute()`; depois de criar, releia o registro. O cliente falso dos testes deve imitar isso (devolver só os campos selecionados e só o `id` nas mutações), senão o teste esconde o erro.
+- **Tipagem do cliente:** o singleton `getRayfinClient()` do template é usado pelo login; não troque o tipo dele. Tipe só o acesso a `data` num adaptador próprio.
 
 | entidade | campos |
 |---|---|
@@ -167,7 +175,8 @@ Organização sugerida, integrada à página atual e com o Sankey como destaque:
 - O update do Data API Builder é por chave primária, sem ETag nem update condicional: a checagem de `versao` tem uma pequena janela de corrida.
 - Functions rodam com a identidade do chamador (`ctx.getDataClient()`), então não blindam nada que o GraphQL direto não permita. Por isso esta versão não usa functions.
 - A auditoria é gravada pelo app: o banco impede alterar ou apagar linhas, mas não garante que toda ação gere uma.
-- Confirme na documentação como ler `claims.sub` no cliente e se a policy de criação é aplicada em MSSQL. Se não for, registre como limitação.
+- Uma consulta devolve uma página (100 linhas): lista e histórico mostram até 100 itens.
+- O `usuario_id` gravado é `session.user.id` (de `useAuth()`); no deploy de 08/11/2026 ele bateu com o `claims.sub` das policies (criar e salvar funcionaram). Falta provar com uma segunda conta que um usuário não enxerga as simulações do outro.
 
 ---
 
@@ -240,7 +249,7 @@ Ao final: `npm run build`, `npm test` e `npm run lint` sem novas falhas, e a `_q
 **Aguarde a aprovação.** Depois implemente em etapas pequenas e testáveis:
 
 1. motor de simulação puro e testes (com as fixtures do modelo);
-2. entidades, `rayfin.yml` e repositório de simulações, depois **pausa para autorizar o deploy**;
+2. entidades, `rayfin.yml`, `rayfin/tsconfig.json` e repositório de simulações, depois **pausa para autorizar o deploy** (e, depois dele, retire do `rayfin.yml` a URL de hospedagem que o `rayfin up` acrescenta);
 3. painel de simulação (premissas, impacto ao vivo, salvar, duplicar, arquivar e histórico);
 4. modo Simulado em KPIs, DRE e Sankey;
 5. documentação e validação final.
