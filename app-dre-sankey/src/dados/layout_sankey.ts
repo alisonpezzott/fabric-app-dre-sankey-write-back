@@ -18,6 +18,8 @@ export interface LinkSankeyEntrada {
     valor: number;
     valor_aa: number | null;
     var_aa_pct: number | null;
+    /** Só no modo Simulado: valor do mesmo link no realizado (o `valor` é o simulado). */
+    valor_realizado?: number;
 }
 
 export interface NoLayout extends NoSankeyEntrada {
