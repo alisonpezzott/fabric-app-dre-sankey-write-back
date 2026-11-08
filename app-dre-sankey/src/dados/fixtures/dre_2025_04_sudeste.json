@@ -1,0 +1,228 @@
+{
+ "columns": [
+  {
+   "name": "dim_conta[ordem_dre]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "dim_conta[cod_conta]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "dim_conta[nome_conta]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "dim_conta[cod_grupo]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "dim_conta[natureza]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[realizado]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[orcado]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[var_pct]",
+   "dataType": "unknown"
+  }
+ ],
+ "rows": [
+  [
+   1,
+   "rec_hardware",
+   "Hardware",
+   "receita_bruta",
+   "receita",
+   1520583.22,
+   1598622.9,
+   -0.04881681602334105
+  ],
+  [
+   2,
+   "rec_licencas_software",
+   "Licenças de Software",
+   "receita_bruta",
+   "receita",
+   1342872.84,
+   1303075.39,
+   0.030541172295487976
+  ],
+  [
+   3,
+   "rec_cloud_assinaturas",
+   "Cloud & Assinaturas",
+   "receita_bruta",
+   "receita",
+   1959363.12,
+   2180199.77,
+   -0.1012919334451631
+  ],
+  [
+   4,
+   "rec_consultoria",
+   "Consultoria",
+   "receita_bruta",
+   "receita",
+   856917.58,
+   858847.43,
+   -0.0022470230830173095
+  ],
+  [
+   5,
+   "rec_suporte_manutencao",
+   "Suporte & Manutenção",
+   "receita_bruta",
+   "receita",
+   598861.99,
+   610044.91,
+   -0.018331306132855107
+  ],
+  [
+   6,
+   "ded_impostos_vendas",
+   "Impostos sobre Vendas",
+   "deducoes_da_receita",
+   "despesa",
+   -664093.26,
+   -632416.03,
+   -0.05008922686542272
+  ],
+  [
+   7,
+   "ded_devolucoes_abatimentos",
+   "Devoluções & Abatimentos",
+   "deducoes_da_receita",
+   "despesa",
+   -78021.38,
+   -100785.98,
+   0.22587070146065943
+  ],
+  [
+   8,
+   "cst_hardware",
+   "Custo de Hardware",
+   "custos_cpv_csp",
+   "despesa",
+   -926609.17,
+   -1044254.62,
+   0.11265973618579725
+  ],
+  [
+   9,
+   "cst_infraestrutura_cloud",
+   "Infraestrutura Cloud",
+   "custos_cpv_csp",
+   "despesa",
+   -502115.7,
+   -662258.44,
+   0.2418130601702863
+  ],
+  [
+   10,
+   "cst_equipe_servicos",
+   "Equipe de Serviços",
+   "custos_cpv_csp",
+   "despesa",
+   -815216.06,
+   -792629.8,
+   -0.028495345494201716
+  ],
+  [
+   11,
+   "cst_royalties_terceiros",
+   "Royalties & Licenças de Terceiros",
+   "custos_cpv_csp",
+   "despesa",
+   -112345.5,
+   -98931.95,
+   -0.1355836006467072
+  ],
+  [
+   12,
+   "opx_pesquisa_desenvolvimento",
+   "Pesquisa & Desenvolvimento",
+   "despesas_operacionais",
+   "despesa",
+   -800211.4,
+   -731762.14,
+   -0.0935403135231894
+  ],
+  [
+   13,
+   "opx_vendas_marketing",
+   "Vendas & Marketing",
+   "despesas_operacionais",
+   "despesa",
+   -640790.02,
+   -627569.81,
+   -0.021065720162669967
+  ],
+  [
+   14,
+   "opx_pessoal_administrativo",
+   "Pessoal Administrativo",
+   "despesas_operacionais",
+   "despesa",
+   -331936.88,
+   -348856.33,
+   0.048499764931884744
+  ],
+  [
+   15,
+   "opx_gerais_administrativas",
+   "Gerais & Administrativas",
+   "despesas_operacionais",
+   "despesa",
+   -193868.02,
+   -259564.93,
+   0.25310395360420995
+  ],
+  [
+   16,
+   "opx_nao_recorrentes",
+   "Despesas Não Recorrentes",
+   "despesas_operacionais",
+   "despesa",
+   -1820000,
+   null,
+   null
+  ],
+  [
+   17,
+   "dep_depreciacao_amortizacao",
+   "Depreciação & Amortização",
+   "depreciacao_amortizacao",
+   "despesa",
+   -161976.13,
+   -181282.85,
+   0.10650053217940914
+  ],
+  [
+   18,
+   "fin_resultado_financeiro",
+   "Resultado Financeiro Líquido",
+   "resultado_financeiro",
+   "despesa",
+   -96923.09,
+   -69479.86,
+   -0.39498107796993254
+  ],
+  [
+   19,
+   "irp_ir_csll",
+   "IR & CSLL",
+   "impostos_sobre_o_lucro",
+   "despesa",
+   null,
+   -285785.36,
+   1
+  ]
+ ]
+}

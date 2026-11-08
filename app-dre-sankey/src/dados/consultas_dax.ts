@@ -61,6 +61,35 @@ export const q_sankey_nos = `EVALUATE
 dim_no_sankey
 ORDER BY dim_no_sankey[coluna_sankey]`;
 
+/** Plano de contas: domínio do mapa de premissas da simulação (simulacao/mapa_premissas.ts). */
+export const q_contas = `EVALUATE
+SELECTCOLUMNS (
+    dim_conta,
+    "cod_conta", dim_conta[cod_conta],
+    "nome_conta", dim_conta[nome_conta],
+    "cod_grupo", dim_conta[cod_grupo],
+    "natureza", dim_conta[natureza],
+    "ordem_dre", dim_conta[ordem_dre]
+)
+ORDER BY [ordem_dre]`;
+
+/**
+ * Todos os links possíveis do Sankey, com a conta de cada link folha (`cod_conta` vazio =
+ * subtotal ou prejuízo). Alimenta a cascata do Sankey simulado (simulacao/cascata_sankey.ts).
+ */
+export const q_links_sankey_lista = `EVALUATE
+SELECTCOLUMNS (
+    dim_link_sankey,
+    "cod_link", dim_link_sankey[cod_link],
+    "cod_no_origem", dim_link_sankey[cod_no_origem],
+    "cod_no_destino", dim_link_sankey[cod_no_destino],
+    "cod_conta", dim_link_sankey[cod_conta],
+    "tipo_link", dim_link_sankey[tipo_link],
+    "etapa", dim_link_sankey[etapa],
+    "ordem_link", dim_link_sankey[ordem_link]
+)
+ORDER BY [ordem_link]`;
+
 export const q_carga = `EVALUATE
 ROW ( "data_ultima_carga", [data_ultima_carga] )`;
 
@@ -167,12 +196,21 @@ ORDER BY dim_calendario[indice_mes]`;
 
 // ---------------------------------------------------------------- DRE
 
-/** Linhas da DRE por conta, realizado × orçado. */
+/**
+ * Linhas da DRE por conta, realizado × orçado. `natureza` (receita/despesa) não muda o grão
+ * (uma natureza por conta) e permite ao motor da simulação converter valor ↔ valor_dre.
+ */
 export function q_dre(ctx: ContextoConsulta): string {
     return `EVALUATE
 ADDCOLUMNS (
     ${summarize(
-        ["dim_conta[ordem_dre]", "dim_conta[cod_conta]", "dim_conta[nome_conta]", "dim_conta[cod_grupo]"],
+        [
+            "dim_conta[ordem_dre]",
+            "dim_conta[cod_conta]",
+            "dim_conta[nome_conta]",
+            "dim_conta[cod_grupo]",
+            "dim_conta[natureza]",
+        ],
         filtros_de(ctx, { sem_cenario: true }),
         [
             ["realizado", `CALCULATE ( [valor_dre], dim_cenario[cod_cenario] = "realizado" )`],

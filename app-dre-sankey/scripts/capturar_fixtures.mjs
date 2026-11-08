@@ -25,13 +25,26 @@ async function tabela(query) {
 const dominio = { anos: [2024, 2025, 2026], regioes: ["sudeste", "sul", "nordeste", "centro_oeste", "norte"] };
 const ctx = (f) => ({ dominio, filtros: { ano: 2025, mes_inicio: 1, mes_fim: 12, regioes: [], cenario: "realizado", ...f } });
 
+const mar = { mes_inicio: 3, mes_fim: 3 };
+const abr = { mes_inicio: 4, mes_fim: 4 };
+const abr_sudeste = { ...abr, regioes: ["sudeste"] };
+
 const fixtures = {
+    contas: await tabela(c.q_contas),
     sankey_nos: await tabela(c.q_sankey_nos),
-    sankey_links_2025_03: await tabela(c.q_sankey_links(ctx({ mes_inicio: 3, mes_fim: 3 }))),
-    sankey_links_2025_04: await tabela(c.q_sankey_links(ctx({ mes_inicio: 4, mes_fim: 4 }))),
+    sankey_links_lista: await tabela(c.q_links_sankey_lista),
+    sankey_links_2025_03: await tabela(c.q_sankey_links(ctx(mar))),
+    sankey_links_2025_04: await tabela(c.q_sankey_links(ctx(abr))),
+    sankey_links_2025_04_sudeste: await tabela(c.q_sankey_links(ctx(abr_sudeste))),
     sankey_links_2025: await tabela(c.q_sankey_links(ctx({}))),
-    dre_2025_03: await tabela(c.q_dre(ctx({ mes_inicio: 3, mes_fim: 3 }))),
-    dre_subtotais_2025_03: await tabela(c.q_dre_subtotais(ctx({ mes_inicio: 3, mes_fim: 3 }))),
+    dre_2025_03: await tabela(c.q_dre(ctx(mar))),
+    dre_2025_04: await tabela(c.q_dre(ctx(abr))),
+    dre_2025_04_sudeste: await tabela(c.q_dre(ctx(abr_sudeste))),
+    dre_2025: await tabela(c.q_dre(ctx({}))),
+    dre_subtotais_2025_03: await tabela(c.q_dre_subtotais(ctx(mar))),
+    dre_subtotais_2025_04: await tabela(c.q_dre_subtotais(ctx(abr))),
+    dre_subtotais_2025_04_sudeste: await tabela(c.q_dre_subtotais(ctx(abr_sudeste))),
+    dre_subtotais_2025: await tabela(c.q_dre_subtotais(ctx({}))),
 };
 for (const [nome, t] of Object.entries(fixtures)) {
     await writeFile(resolve(raiz, `src/dados/fixtures/${nome}.json`), JSON.stringify(t, null, 1) + "\n");

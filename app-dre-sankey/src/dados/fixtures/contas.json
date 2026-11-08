@@ -1,0 +1,159 @@
+{
+ "columns": [
+  {
+   "name": "[cod_conta]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[nome_conta]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[cod_grupo]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[natureza]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[ordem_dre]",
+   "dataType": "unknown"
+  }
+ ],
+ "rows": [
+  [
+   "rec_hardware",
+   "Hardware",
+   "receita_bruta",
+   "receita",
+   1
+  ],
+  [
+   "rec_licencas_software",
+   "Licenças de Software",
+   "receita_bruta",
+   "receita",
+   2
+  ],
+  [
+   "rec_cloud_assinaturas",
+   "Cloud & Assinaturas",
+   "receita_bruta",
+   "receita",
+   3
+  ],
+  [
+   "rec_consultoria",
+   "Consultoria",
+   "receita_bruta",
+   "receita",
+   4
+  ],
+  [
+   "rec_suporte_manutencao",
+   "Suporte & Manutenção",
+   "receita_bruta",
+   "receita",
+   5
+  ],
+  [
+   "ded_impostos_vendas",
+   "Impostos sobre Vendas",
+   "deducoes_da_receita",
+   "despesa",
+   6
+  ],
+  [
+   "ded_devolucoes_abatimentos",
+   "Devoluções & Abatimentos",
+   "deducoes_da_receita",
+   "despesa",
+   7
+  ],
+  [
+   "cst_hardware",
+   "Custo de Hardware",
+   "custos_cpv_csp",
+   "despesa",
+   8
+  ],
+  [
+   "cst_infraestrutura_cloud",
+   "Infraestrutura Cloud",
+   "custos_cpv_csp",
+   "despesa",
+   9
+  ],
+  [
+   "cst_equipe_servicos",
+   "Equipe de Serviços",
+   "custos_cpv_csp",
+   "despesa",
+   10
+  ],
+  [
+   "cst_royalties_terceiros",
+   "Royalties & Licenças de Terceiros",
+   "custos_cpv_csp",
+   "despesa",
+   11
+  ],
+  [
+   "opx_pesquisa_desenvolvimento",
+   "Pesquisa & Desenvolvimento",
+   "despesas_operacionais",
+   "despesa",
+   12
+  ],
+  [
+   "opx_vendas_marketing",
+   "Vendas & Marketing",
+   "despesas_operacionais",
+   "despesa",
+   13
+  ],
+  [
+   "opx_pessoal_administrativo",
+   "Pessoal Administrativo",
+   "despesas_operacionais",
+   "despesa",
+   14
+  ],
+  [
+   "opx_gerais_administrativas",
+   "Gerais & Administrativas",
+   "despesas_operacionais",
+   "despesa",
+   15
+  ],
+  [
+   "opx_nao_recorrentes",
+   "Despesas Não Recorrentes",
+   "despesas_operacionais",
+   "despesa",
+   16
+  ],
+  [
+   "dep_depreciacao_amortizacao",
+   "Depreciação & Amortização",
+   "depreciacao_amortizacao",
+   "despesa",
+   17
+  ],
+  [
+   "fin_resultado_financeiro",
+   "Resultado Financeiro Líquido",
+   "resultado_financeiro",
+   "despesa",
+   18
+  ],
+  [
+   "irp_ir_csll",
+   "IR & CSLL",
+   "impostos_sobre_o_lucro",
+   "despesa",
+   19
+  ]
+ ]
+}

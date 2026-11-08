@@ -1,0 +1,86 @@
+{
+ "columns": [
+  {
+   "name": "[cod_no]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[apos_ordem_dre]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[nome_no]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[realizado]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[orcado]",
+   "dataType": "unknown"
+  },
+  {
+   "name": "[var_pct]",
+   "dataType": "unknown"
+  }
+ ],
+ "rows": [
+  [
+   "receita_bruta",
+   5,
+   "Receita Bruta",
+   175027678.18,
+   176334244.06,
+   -0.007409598101406891
+  ],
+  [
+   "receita_liquida",
+   7,
+   "Receita Líquida",
+   154819681.8,
+   155883814.04,
+   -0.006826444724574945
+  ],
+  [
+   "lucro_bruto",
+   11,
+   "Lucro Bruto",
+   88283003.38000001,
+   89115897.75999999,
+   -0.00934619300187119
+  ],
+  [
+   "ebitda",
+   16,
+   "EBITDA",
+   26606624.760000013,
+   34922319.91999999,
+   -0.23811978067463901
+  ],
+  [
+   "ebit_lucro_operacional",
+   17,
+   "EBIT (Lucro Operacional)",
+   21693816.27000001,
+   29837365.429999985,
+   -0.2729312404979309
+  ],
+  [
+   "lair",
+   18,
+   "LAIR",
+   19731753.60000001,
+   27636745.329999983,
+   -0.2860319344991402
+  ],
+  [
+   "lucro_liquido",
+   19,
+   "Lucro Líquido",
+   13088163.15000001,
+   19749929.789999984,
+   -0.3373058391009085
+  ]
+ ]
+}
