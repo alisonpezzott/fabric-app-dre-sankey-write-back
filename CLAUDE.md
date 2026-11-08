@@ -50,7 +50,7 @@ Esses valores são testes da tabela `_qualidade` (seção 6). Diferença tolerad
 
 1. **Idioma:** português do Brasil em tudo (tabelas, colunas, medidas, pastas, textos da UI, comentários de código).
 2. **Nomenclatura:** `snake_case` em todos os identificadores: tabelas, colunas, medidas, pastas de exibição, arquivos, variáveis, componentes e funções do app. Rótulos de exibição para o usuário final ficam nas colunas `nome_*` (com acentos).
-3. **Nomes:** `dim_` dimensões e `fato_` fatos. Repositório e itens do Fabric em kebab-case: repositório e workspace `fabric-app-dre-sankey`, app `app-dre-sankey`, modelo semântico e report `dre-sankey` (mesmo nome; o tipo do item os distingue).
+3. **Nomes:** `dim_` dimensões e `fato_` fatos. Repositório e itens do Fabric em kebab-case: repositório e workspace `fabric-app-dre-sankey-write-back` (nova versão do `fabric-app-dre-sankey`, que continua no workspace original), app `app-dre-sankey`, modelo semântico e report `dre-sankey` (mesmo nome; o tipo do item os distingue).
 4. **Segurança de dados:** nunca colar, versionar ou enviar dados reais de clientes em prompts, commits ou logs. Este projeto usa apenas dados fictícios. Se for adaptado para um cliente real, mascarar/anonimizar antes e seguir a política da Power Tuning.
 5. **Sankey dinâmico:** o valor de cada link é sempre calculado pela medida `sankey_valor` sobre os valores já agregados do filtro. Nunca somar links pré‑calculados por mês ou região, porque um mês com prejuízo somado a meses com lucro (ou uma região negativa somada a regiões positivas) mostraria lucro e prejuízo ao mesmo tempo.
 6. **Sem mock no app:** o app consome somente o modelo semântico. Se uma query falhar, mostrar estado de erro, nunca dados fictícios embutidos.
@@ -79,7 +79,7 @@ dataset/*.csv (GitHub)
 
 | item | nome |
 |---|---|
-| workspace | `fabric-app-dre-sankey` (capacidade Fabric) |
+| workspace | `fabric-app-dre-sankey-write-back` (capacidade Fabric) |
 | modelo semântico | `dre-sankey` |
 | report de conferência | `dre-sankey` |
 | fabric app | `app-dre-sankey` |
@@ -121,7 +121,7 @@ Histórico: até 27/10/2026 o projeto tinha lakehouse (`lh_blacksmith`), três n
 ### 5.1 Fonte
 O refresh do modelo `dre-sankey` baixa os 7 CSVs de `dataset/` do GitHub. Duas expressões compartilhadas em `expressions.tmdl`:
 
-- `url_dataset` (parâmetro, texto): `https://github.com/alisonpezzott/fabric-app-dre-sankey/raw/main/dataset`. Para ler de outro repositório, trocar o parâmetro no Desktop antes de publicar.
+- `url_dataset` (parâmetro, texto): `https://github.com/alisonpezzott/fabric-app-dre-sankey/raw/main/dataset`. Para ler de outro repositório, trocar o parâmetro no Desktop antes de publicar. Esta versão continua lendo os CSVs do repositório original.
 - `ler_csv(arquivo, tipos)` (função): `Web.Contents(url_dataset, [RelativePath = arquivo & ".csv"])` → `Csv.Document` UTF-8 → cabeçalho → confere se as colunas são exatamente as esperadas → `Text.Trim` em tudo → tipos com cultura `en-US` → **falha o refresh** se alguma linha tiver valor que não converte (o equivalente ao antigo `FAILFAST`).
 
 ### 5.2 Dicionário de dados
@@ -654,7 +654,7 @@ Regras: verificar o `status` de cada resposta antes de passar colunas e linhas a
 
 ### 8.6 Deploy e distribuição
 - Validar localmente: `npm run build`, `npm test`, `npm run lint` e `npm run validate:visual -- <fábrica.ts> <contexto-json>` (render headless dos specs com dados reais; exige `az login`). Os números do app se conferem com o `dre-sankey` no mesmo recorte.
-- Publicar: `npx rayfin up --workspace fabric-app-dre-sankey --item-name app-dre-sankey` e conferir com `npx rayfin up status --workspace fabric-app-dre-sankey --item-name app-dre-sankey`. O deploy grava `rayfin/.deployments.json` e `rayfin/.env` (fora do git) e acrescenta a URL de hospedagem em `rayfin.yml` (não versionar).
+- Publicar: `npx rayfin up --workspace fabric-app-dre-sankey-write-back --item-name app-dre-sankey` e conferir com `npx rayfin up status --workspace fabric-app-dre-sankey-write-back --item-name app-dre-sankey`. O deploy grava `rayfin/.deployments.json` e `rayfin/.env` (fora do git) e acrescenta a URL de hospedagem em `rayfin.yml` (não versionar).
 - Desenvolvimento: `npm run dev` (o `predev` roda `rayfin env`, que lê o `rayfin/.env` criado pelo primeiro `rayfin up`); abrir o item no portal com `&devUri=http://localhost:5173` no fim da URL.
 - Limitação atual do preview: apps ligados a modelo semântico só funcionam abertos dentro do portal do Fabric.
 - Opcional (não feito): incluir o app e o modelo num **org app** do workspace para distribuição com audiências.
