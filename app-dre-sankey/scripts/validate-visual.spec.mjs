@@ -17,6 +17,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createVisualInputLoader } from './visual-input.mjs';
 import { main, renderVisual, runValidationBatch } from './validate-visual.mjs';
 
+// Vitest cannot spy on an ESM namespace export, so wrap the renderer in a
+// mock that keeps the real implementation unless a test overrides it.
+vi.mock('@microsoft/fabric-visuals/headless', async (importOriginal) => {
+    const actual = await importOriginal();
+    return { ...actual, renderVisualToSvg: vi.fn(actual.renderVisualToSvg) };
+});
+
 vi.mock('./visual-input.mjs', async (importOriginal) => ({
     ...await importOriginal(),
     createVisualInputLoader: vi.fn(),
@@ -118,7 +125,7 @@ describe('visual validation', () => {
     });
 
     it('formats error diagnostics before applying the zero-mark rule', async () => {
-        vi.spyOn(headless, 'renderVisualToSvg').mockResolvedValueOnce({
+        vi.mocked(headless.renderVisualToSvg).mockResolvedValueOnce({
             diagnostics: [
                 { severity: 'warning', source: 'vega-lite', message: 'Warning only' },
                 { severity: 'error', source: 'vega-lite', message: 'Invalid encoding' },
